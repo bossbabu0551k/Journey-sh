@@ -1,0 +1,58 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Find the project
+        run: |
+          if [ -f EndlessRoad.zip ]; then
+            mkdir -p work
+            unzip -q -o EndlessRoad.zip -d work
+            DIR=$(dirname "$(find work -name settings.gradle.kts | head -n 1)")
+          else
+            DIR=.
+          fi
+          echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Collect the APK
+        run: |
+          APK=$(find "$PROJECT_DIR" -name "*.apk" -path "*release*" | head -n 1)
+          cp "$APK" EndlessRoad.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EndlessRoad-apk
+          path: EndlessRoad.apk
+
+      - name: Publish a release with the APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" EndlessRoad.apk \
+            --title "Endless Road build ${{ github.run_number }}" \
+            --notes "Download EndlessRoad.apk and install it on your phone."
