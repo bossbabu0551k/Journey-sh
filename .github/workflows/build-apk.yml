@@ -23,15 +23,28 @@ jobs:
         with:
           gradle-version: 8.9
 
-      - name: Find the project
+      - name: Find the project (loose files, a subfolder, or any .zip)
         run: |
-          if [ -f EndlessRoad.zip ]; then
-            mkdir -p work
-            unzip -q -o EndlessRoad.zip -d work
-            DIR=$(dirname "$(find work -name settings.gradle.kts | head -n 1)")
-          else
-            DIR=.
+          echo "Files in the repository:"
+          find . -path ./.git -prune -o -type f -print | head -60
+          DIR=""
+          S=$(find . -name settings.gradle.kts -not -path "./.git/*" | head -n 1 || true)
+          if [ -n "$S" ]; then DIR=$(dirname "$S"); fi
+          if [ -z "$DIR" ]; then
+            Z=$(find . -iname "*.zip" -not -path "./.git/*" | head -n 1 || true)
+            if [ -n "$Z" ]; then
+              echo "Unzipping: $Z"
+              mkdir -p work
+              unzip -q -o "$Z" -d work
+              S=$(find work -name settings.gradle.kts | head -n 1 || true)
+              if [ -n "$S" ]; then DIR=$(dirname "$S"); fi
+            fi
           fi
+          if [ -z "$DIR" ]; then
+            echo "::error::No Gradle project found. Upload EndlessRoad.zip (a .zip file) to the repository root."
+            exit 1
+          fi
+          echo "Using project folder: $DIR"
           echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
 
       - name: Build release APK
